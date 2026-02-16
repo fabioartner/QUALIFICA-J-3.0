@@ -1,0 +1,7 @@
+{
+  "name": "Qualifica Já 3.0",
+  "description": "Plataforma de auditoria padronizada para o setor de hospitalidade e alimentação com rastreabilidade via QR Code por setor.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
