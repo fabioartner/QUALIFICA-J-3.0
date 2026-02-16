@@ -2,17 +2,18 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQualificaStore } from '../store';
-import { Lock, Mail, RefreshCcw, AlertCircle } from 'lucide-react';
+import { Lock, Mail, RefreshCcw, AlertCircle, Loader2 } from 'lucide-react';
 import Logo from '../components/Logo';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [error, setError] = useState('');
-  const { login, usuarios, resetData } = useQualificaStore();
+  const { login, usuarios } = useQualificaStore();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
@@ -21,20 +22,29 @@ const Login: React.FC = () => {
       return;
     }
 
-    const success = login(email, password);
-    if (success) {
-      navigate('/dashboard');
-    } else {
-      setError('Credenciais incorretas. Tente novamente ou use o Acesso Rápido.');
+    setIsAuthenticating(true);
+    try {
+      const success = await login(email, password);
+      if (success) {
+        navigate('/dashboard');
+      } else {
+        setError('Credenciais incorretas ou usuário inativo.');
+      }
+    } catch (err) {
+      setError('Erro ao conectar ao servidor.');
+    } finally {
+      setIsAuthenticating(false);
     }
   };
 
-  const handleQuickLogin = (userEmail: string) => {
+  const handleQuickLogin = async (userEmail: string) => {
     setError('');
-    const success = login(userEmail, '12345678');
+    setIsAuthenticating(true);
+    const success = await login(userEmail, '12345678');
     if (success) {
       navigate('/dashboard');
     }
+    setIsAuthenticating(false);
   };
 
   return (
@@ -85,27 +95,23 @@ const Login: React.FC = () => {
 
           <button
             type="submit"
-            className="w-full py-5 bg-accent text-white font-black rounded-2xl shadow-xl shadow-accent/20 hover:scale-[1.02] active:scale-[0.98] transition-all uppercase tracking-widest text-sm"
+            disabled={isAuthenticating}
+            className="w-full py-5 bg-accent text-white font-black rounded-2xl shadow-xl shadow-accent/20 hover:scale-[1.02] active:scale-[0.98] transition-all uppercase tracking-widest text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            ENTRAR NO SISTEMA
+            {isAuthenticating ? <Loader2 className="animate-spin" size={20} /> : 'ENTRAR NO SISTEMA'}
           </button>
         </form>
 
         <div className="mt-10 pt-6 border-t border-gray-50">
           <div className="flex justify-between items-center mb-6">
-            <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Acesso Rápido para Testes</p>
-            <button 
-              onClick={() => { resetData(); window.location.reload(); }}
-              className="text-[9px] flex items-center gap-1 text-gray-300 hover:text-red-500 font-bold transition-colors uppercase"
-            >
-              <RefreshCcw size={10} /> Resetar Banco
-            </button>
+            <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Usuários de Sistema</p>
           </div>
           <div className="space-y-2">
             {usuarios.slice(0, 3).map(u => (
               <button
                 key={u.id}
                 type="button"
+                disabled={isAuthenticating}
                 onClick={() => handleQuickLogin(u.email)}
                 className="w-full text-left p-4 rounded-2xl bg-gray-50 hover:bg-gray-100 transition-all flex justify-between items-center group border border-transparent hover:border-primary/10"
               >

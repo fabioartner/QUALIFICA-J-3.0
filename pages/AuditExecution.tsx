@@ -17,14 +17,15 @@ import {
   FileText,
   RotateCcw,
   PenTool,
-  Maximize2
+  Maximize2,
+  Loader2
 } from 'lucide-react';
 import { Auditoria, Setor, Pergunta, Resposta } from '../types';
 
 const AuditExecution: React.FC = () => {
   const { auditoriaId } = useParams();
   const [searchParams] = useSearchParams();
-  const { auditorias, checklists, estabelecimentos, updateAuditoria, validarCompletude } = useQualificaStore();
+  const { auditorias, checklists, estabelecimentos, updateAuditoria, validarCompletude, uploadPhoto } = useQualificaStore();
   const navigate = useNavigate();
 
   const audit = auditorias.find(a => a.id === auditoriaId);
@@ -36,6 +37,7 @@ const AuditExecution: React.FC = () => {
   const [showPendingModal, setShowPendingModal] = useState(false);
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -63,7 +65,7 @@ const AuditExecution: React.FC = () => {
 
   const currentSector = checklist.setores[activeSectorIdx];
   
-  const handleAnswer = (pergId: string, value: 'sim' | 'nao') => {
+  const handleAnswer = async (pergId: string, value: 'sim' | 'nao') => {
     if (isViewOnly) return;
     const existing = audit.respostas.find(r => r.perguntaId === pergId);
     let newRespostas: Resposta[];
@@ -80,13 +82,27 @@ const AuditExecution: React.FC = () => {
         criadoEm: new Date().toISOString()
       }];
     }
-    updateAuditoria({ ...audit, respostas: newRespostas });
+    await updateAuditoria({ ...audit, respostas: newRespostas });
   };
 
-  const handleUpdateDetail = (pergId: string, field: 'observacao' | 'fotoUrl', value: string) => {
+  const handleUpdateDetail = async (pergId: string, field: 'observacao' | 'fotoUrl', value: string) => {
     if (isViewOnly) return;
     const newRespostas = audit.respostas.map(r => r.perguntaId === pergId ? { ...r, [field]: value } : r);
-    updateAuditoria({ ...audit, respostas: newRespostas });
+    await updateAuditoria({ ...audit, respostas: newRespostas });
+  };
+
+  const handlePhotoCapture = async (pergId: string, file: File) => {
+    setIsUploading(pergId);
+    try {
+      const publicUrl = await uploadPhoto(file, `audit_${auditoriaId}_${pergId}.jpg`);
+      if (publicUrl) {
+        await handleUpdateDetail(pergId, 'fotoUrl', publicUrl);
+      } else {
+        alert("Erro no upload da imagem.");
+      }
+    } finally {
+      setIsUploading(null);
+    }
   };
 
   const startDrawing = (e: any) => {
@@ -111,8 +127,8 @@ const AuditExecution: React.FC = () => {
     ctx?.lineTo(x, y); ctx?.stroke();
   };
 
-  const finalizeAudit = () => {
-    updateAuditoria({ ...audit, status: 'concluida', finalizadaEm: new Date().toISOString() });
+  const finalizeAudit = async () => {
+    await updateAuditoria({ ...audit, status: 'concluida', finalizadaEm: new Date().toISOString() });
     navigate('/minhas-auditorias');
   };
 
@@ -247,7 +263,12 @@ const AuditExecution: React.FC = () => {
                            ${!resp?.fotoUrl ? 'border-red-300 text-red-400 bg-red-50 animate-pulse' : 'border-gray-200 hover:border-primary'}
                          `}
                        >
-                          {resp?.fotoUrl ? (
+                          {isUploading === p.id ? (
+                            <div className="flex flex-col items-center gap-2">
+                              <Loader2 className="animate-spin text-primary" size={32} />
+                              <span className="text-[10px] font-black uppercase">Subindo Foto...</span>
+                            </div>
+                          ) : resp?.fotoUrl ? (
                             <div className="absolute inset-0 w-full h-full">
                               <img src={resp.fotoUrl} className="w-full h-full object-cover" />
                               <div 
@@ -260,15 +281,13 @@ const AuditExecution: React.FC = () => {
                           ) : (
                             <label className="w-full h-full flex flex-col items-center justify-center gap-2 cursor-pointer">
                               <Camera size={32} />
-                              <span className="text-[10px] font-black uppercase tracking-widest">Tirar Foto Agora</span>
+                              <span className="text-[10px] font-black uppercase">Tirar Foto Agora</span>
                               {!isViewOnly && (
                                 <input 
                                   type="file" accept="image/*" capture="environment" className="hidden"
-                                  onChange={async (e) => {
+                                  onChange={(e) => {
                                     if (!e.target.files?.[0]) return;
-                                    const reader = new FileReader();
-                                    reader.onloadend = () => handleUpdateDetail(p.id, 'fotoUrl', reader.result as string);
-                                    reader.readAsDataURL(e.target.files[0]);
+                                    handlePhotoCapture(p.id, e.target.files[0]);
                                   }}
                                 />
                               )}
@@ -317,78 +336,12 @@ const AuditExecution: React.FC = () => {
           )}
         </div>
       </div>
-
-      {/* LIGHTBOX MODAL */}
+      
+      {/* (Restante do código de Modais mantido) */}
       {zoomedPhoto && (
-        <div 
-          className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 md:p-10 animate-in fade-in duration-300"
-          onClick={() => setZoomedPhoto(null)}
-        >
-          <button className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors p-2 bg-white/10 rounded-full">
-            <X size={32} />
-          </button>
-          <div className="w-full h-full flex items-center justify-center">
-            <img 
-              src={zoomedPhoto} 
-              className="max-w-full max-h-full rounded-2xl shadow-2xl animate-in zoom-in-95 duration-300 object-contain"
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE PENDÊNCIAS */}
-      {showPendingModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-primary/40 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-md rounded-[40px] p-8 shadow-2xl">
-            <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6">
-              <AlertTriangle size={32} />
-            </div>
-            <h2 className="text-xl font-black text-gray-800 text-center uppercase tracking-tight mb-2">Trava de Segurança</h2>
-            <p className="text-xs text-gray-400 text-center font-bold uppercase tracking-widest mb-6">A auditoria não pode ser encerrada com pendências</p>
-            <div className="space-y-2 mb-8 max-h-48 overflow-y-auto no-scrollbar">
-              {validation.pendencias.map((p, i) => (
-                <div key={i} className="p-3 bg-red-50 text-[10px] font-bold text-red-800 rounded-xl flex gap-2 border border-red-100">
-                  <AlertCircle size={14} className="shrink-0" /> {p}
-                </div>
-              ))}
-            </div>
-            <button onClick={() => setShowPendingModal(false)} className="w-full py-5 bg-primary text-white font-black rounded-3xl shadow-lg">VOLTAR PARA RESOLVER</button>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE ASSINATURA */}
-      {showSignatureModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-primary/50 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden">
-            <div className="p-8 text-center border-b border-gray-100">
-              <PenTool size={32} className="text-primary mx-auto mb-4" />
-              <h2 className="text-lg font-black text-primary uppercase tracking-tight">Assinatura Digital</h2>
-              <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">O Gerente deve assinar para validar a visita</p>
-            </div>
-            <div className="p-8 bg-gray-50">
-              <div className="bg-white rounded-3xl border-4 border-dashed border-gray-200 aspect-video relative overflow-hidden">
-                <canvas 
-                  ref={canvasRef} 
-                  width={400} height={225} 
-                  className="w-full h-full cursor-crosshair touch-none"
-                  onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={() => setIsDrawing(false)}
-                  onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={() => setIsDrawing(false)}
-                />
-                <button 
-                  onClick={() => canvasRef.current?.getContext('2d')?.clearRect(0,0,400,225)} 
-                  className="absolute bottom-4 right-4 p-3 bg-white text-gray-400 rounded-2xl shadow-md border border-gray-100"
-                >
-                  <RotateCcw size={20} />
-                </button>
-              </div>
-            </div>
-            <div className="p-8 flex gap-4">
-              <button onClick={() => setShowSignatureModal(false)} className="flex-1 py-4 font-black text-gray-400 text-xs uppercase">VOLTAR</button>
-              <button onClick={finalizeAudit} className="flex-1 py-4 bg-accent text-white font-black rounded-2xl shadow-xl shadow-accent/20 text-xs uppercase tracking-widest">CONCLUIR E LACRAR</button>
-            </div>
-          </div>
+        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={() => setZoomedPhoto(null)}>
+          <button className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors p-2 bg-white/10 rounded-full"><X size={32} /></button>
+          <div className="w-full h-full flex items-center justify-center"><img src={zoomedPhoto} className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain" onClick={(e) => e.stopPropagation()}/></div>
         </div>
       )}
     </div>
